@@ -10,6 +10,7 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: ['deil-mcp-demo.canadacentral.cloudapp.azure.com'],	  
     proxy: {
       "/chat": "http://localhost:8000",
     },
