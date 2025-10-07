@@ -9,6 +9,11 @@ export default defineConfig({
       "~": resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      "/chat": "http://localhost:8000",
+    },
+  },
   build: {
     outDir: "../api/static/react",
     emptyOutDir: true,

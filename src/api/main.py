@@ -5,12 +5,11 @@ import contextlib
 import logging
 import os
 from typing import Union
-from urllib.parse import urlparse
 
 import fastapi
 from azure.ai.projects.aio import AIProjectClient
-from azure.ai.inference.aio import ChatCompletionsClient, EmbeddingsClient
-from azure.identity import AzureDeveloperCliCredential, ManagedIdentityCredential
+#from azure.identity import AzureDeveloperCliCredential, ManagedIdentityCredential
+from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 
@@ -22,30 +21,18 @@ enable_trace = False
 
 @contextlib.asynccontextmanager
 async def lifespan(app: fastapi.FastAPI):
-    azure_credential: Union[AzureDeveloperCliCredential, ManagedIdentityCredential]
-    if not os.getenv("RUNNING_IN_PRODUCTION"):
-        if tenant_id := os.getenv("AZURE_TENANT_ID"):
-            logger.info("Using AzureDeveloperCliCredential with tenant_id %s", tenant_id)
-            azure_credential = AzureDeveloperCliCredential(tenant_id=tenant_id)
-        else:
-            logger.info("Using AzureDeveloperCliCredential")
-            azure_credential = AzureDeveloperCliCredential()
-    else:
-        # User-assigned identity was created and set in api.bicep
-        user_identity_client_id = os.getenv("AZURE_CLIENT_ID")
-        logger.info("Using ManagedIdentityCredential with client_id %s", user_identity_client_id)
-        azure_credential = ManagedIdentityCredential(client_id=user_identity_client_id)
+    logger.info("Using DefaultAzureCredential (will pick up VM managed identity)")
+    azure_credential = DefaultAzureCredential()
 
-    endpoint = os.environ["AZURE_EXISTING_AIPROJECT_ENDPOINT"]
     project = AIProjectClient(
         credential=azure_credential,
-        endpoint=endpoint,
+        endpoint=os.environ["AZURE_EXISTING_AIPROJECT_ENDPOINT"],
     )
 
     if enable_trace:
         application_insights_connection_string = ""
         try:
-            application_insights_connection_string = await project.telemetry.get_application_insights_connection_string()
+            application_insights_connection_string = await project.telemetry.get_connection_string()
         except Exception as e:
             e_string = str(e)
             logger.error("Failed to get Application Insights connection string, error: %s", e_string)
@@ -57,22 +44,8 @@ async def lifespan(app: fastapi.FastAPI):
             from azure.monitor.opentelemetry import configure_azure_monitor
             configure_azure_monitor(connection_string=application_insights_connection_string)
 
-
-    # Project endpoint has the form:   https://your-ai-services-account-name.services.ai.azure.com/api/projects/your-project-name
-    # Inference endpoint has the form: https://your-ai-services-account-name.services.ai.azure.com/models
-    # Strip the "/api/projects/your-project-name" part and replace with "/models":
-    inference_endpoint = f"https://{urlparse(endpoint).netloc}/models"
-
-    chat =  ChatCompletionsClient(
-        endpoint=inference_endpoint,
-        credential=azure_credential,
-        credential_scopes=["https://ai.azure.com/.default"],
-    )
-    embed =  EmbeddingsClient(
-        endpoint=inference_endpoint,
-        credential=azure_credential,
-        credential_scopes=["https://ai.azure.com/.default"],
-    )
+    chat = project.inference.get_chat_completions_client()
+    embed = project.inference.get_embeddings_client()
 
     endpoint = os.environ.get('AZURE_AI_SEARCH_ENDPOINT')
     search_index_manager = None

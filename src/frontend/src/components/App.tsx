@@ -11,7 +11,8 @@ const App: React.FC = () => {
       description: "This is a sample chatbot.",
       model: "default",
       metadata: {
-        logo: "Avatar_Default.svg",
+        //logo: "Avatar_Default.svg",
+	logo: "/chatbot.png",
       },
   };
 
